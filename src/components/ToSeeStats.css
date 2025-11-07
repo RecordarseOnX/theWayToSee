@@ -78,7 +78,8 @@
 .custom-datepicker-input:focus, input[type="text"]:focus, input[type="number"]:focus {
   border-color: #8a5cf6; outline: none; background: #fff;
 }
-/* --- 日历弹窗全局样式 (已清理时间选择器部分) --- */
+
+/* --- 日历弹窗全局样式 --- */
 .react-datepicker-popper { z-index: 1001 !important; }
 .react-datepicker {
   font-family: inherit !important; border-radius: 12px !important;
@@ -98,6 +99,9 @@
 }
 .react-datepicker__day--today { font-weight: bold !important; }
 
+.react-datepicker__input-time-container{
+  display: none;
+}
 /* --- 汇总 & 提交按钮 --- */
 #summary {
   display: flex; justify-content: space-between; 

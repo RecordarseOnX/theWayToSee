@@ -32,6 +32,22 @@ export default function ToSeeStats({ onSummaryChange }) {
     highspeed: { icon: <TramFront size={16} />, text: "高铁" },
   };
 
+  const handleDateTimeChange = (field) => (date) => {
+    const oldDate = form[field] || new Date(); // Fallback to current date if null
+    const newDate = new Date(date);
+    const oldDateOnly = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate());
+    const newDateOnly = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
+    if (oldDateOnly.getTime() === newDateOnly.getTime()) {
+      // 时间变化
+      setForm({ ...form, [field]: newDate });
+    } else {
+      // 日期变化，保留时间
+      const preserved = new Date(newDate);
+      preserved.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds(), oldDate.getMilliseconds());
+      setForm({ ...form, [field]: preserved });
+    }
+  };
+
   useEffect(() => {
     const fetchRecords = async () => {
       const { data, error } = await supabase.from("trips").select("*").order("start_datetime", { ascending: false });
@@ -114,6 +130,7 @@ export default function ToSeeStats({ onSummaryChange }) {
   };
   
   const { timeText, costText } = calcSummary();
+
   const renderSubmitButtonContent = () => {
     switch (submitState) {
       case 'submitting': return <Loader2 size={18} className="spinner" />;
@@ -123,7 +140,7 @@ export default function ToSeeStats({ onSummaryChange }) {
     }
   };
 
-return (
+  return (
     <>
       <button className="toSeeBtn" onClick={() => setOpen(true)}>ToSee</button>
       {open && (
@@ -131,14 +148,15 @@ return (
           <div className="toSeeModal" ref={modalRef}>
             <div className="mode-buttons">{Object.keys(modeDetails).map((m) => (<button key={m} onClick={() => setOutboundMode(m)} className={outboundMode === m ? "active" : ""}>{modeDetails[m].icon} <span>{modeDetails[m].text}</span></button>))}</div>
             <input type="text" placeholder="去程班次号（可不填）" value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })}/>
-            
             <div className="datetime-picker-group">
               <div className="datepicker-wrapper">
                 <DatePicker
                   selected={form.departDateTime}
-                  onChange={(date) => setForm({ ...form, departDateTime: date })}
+                  onChange={handleDateTimeChange('departDateTime')}
+                  showTimeInput
+                  timeInputLabel="时间:"
                   locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm" // ✅ 保留时间格式，允许手动输入
+                  dateFormat="yyyy/MM/dd HH:mm"
                   className="custom-datepicker-input"
                   portalId="root-datepicker"
                 />
@@ -147,31 +165,32 @@ return (
               <div className="datepicker-wrapper">
                 <DatePicker
                   selected={form.arriveDateTime}
-                  onChange={(date) => setForm({ ...form, arriveDateTime: date })}
+                  onChange={handleDateTimeChange('arriveDateTime')}
+                  showTimeInput
+                  timeInputLabel="时间:"
                   locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm" // ✅ 保留时间格式，允许手动输入
+                  dateFormat="yyyy/MM/dd HH:mm"
                   className="custom-datepicker-input"
                   portalId="root-datepicker"
                 />
                 <CalendarDays size={16} className="datepicker-icon" />
               </div>
             </div>
-
             <div className="fee-group">
               <input type="number" placeholder="去程费用" value={form.fee} onChange={(e) => setForm({ ...form, fee: e.target.value })} />
               <input type="number" placeholder="打车费（可不填）" value={form.taxiFee} onChange={(e) => setForm({ ...form, taxiFee: e.target.value })} />
             </div>
-            
             <div className="mode-buttons">{Object.keys(modeDetails).map((m) => (<button key={m} onClick={() => setReturnMode(current => (current === m ? null : m))} className={returnMode === m ? "active" : ""}>{modeDetails[m].icon} <span>{modeDetails[m].text}</span></button>))}</div>
             <input type="text" placeholder="返程班次号（可不填）" value={form.returnFlight} onChange={(e) => setForm({ ...form, returnFlight: e.target.value })} />
-            
             <div className="datetime-picker-group">
               <div className="datepicker-wrapper">
                 <DatePicker
                   selected={form.returnDepart}
-                  onChange={(date) => setForm({ ...form, returnDepart: date })}
+                  onChange={handleDateTimeChange('returnDepart')}
+                  showTimeInput
+                  timeInputLabel="时间:"
                   locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm" // ✅ 保留时间格式，允许手动输入
+                  dateFormat="yyyy/MM/dd HH:mm"
                   className="custom-datepicker-input"
                   portalId="root-datepicker"
                 />
@@ -180,26 +199,25 @@ return (
               <div className="datepicker-wrapper">
                 <DatePicker
                   selected={form.returnArrive}
-                  onChange={(date) => setForm({ ...form, returnArrive: date })}
+                  onChange={handleDateTimeChange('returnArrive')}
+                  showTimeInput
+                  timeInputLabel="时间:"
                   locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm" // ✅ 保留时间格式，允许手动输入
+                  dateFormat="yyyy/MM/dd HH:mm"
                   className="custom-datepicker-input"
                   portalId="root-datepicker"
                 />
                 <CalendarDays size={16} className="datepicker-icon" />
               </div>
             </div>
-
             <div className="fee-group">
               <input type="number" placeholder="返程费用（可不填）" value={form.returnFee} onChange={(e) => setForm({ ...form, returnFee: e.target.value })} />
               <input type="number" placeholder="打车费（可不填）" value={form.returnTaxi} onChange={(e) => setForm({ ...form, returnTaxi: e.target.value })} />
             </div>
-
             <div id="summary">
               <div className="summary-item"><Clock size={14} /><span>总耗时：{timeText}</span></div>
-              <div className="summary-item"><Wallet size={14} /><span>总花费：{costText}</span></div>
+              <div className="summary-item"><Wallet size={14} /><span>总花费：￥{costText}</span></div>
             </div>
-
             <button id="addBtn" className={`state-${submitState}`} onClick={handleAdd} disabled={submitState !== 'idle'}>
               {renderSubmitButtonContent()}
             </button>
