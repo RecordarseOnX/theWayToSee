@@ -1,0 +1,41 @@
+/* src/index.css */
+* {
+  font-family: 'JetBrains Mono', monospace !important;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/JetBrainsMono-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --primary-color: #007bff;
+  --danger-color: #dc3545;
+  --success-color: #28a745;
+  --border-color: #dee2e6;
+  --text-color: #333;
+  --body-bg: #f4f7f9;
+}
+
+* { 
+  user-select: none; 
+  box-sizing: border-box; 
+}
+
+body {
+  font-family: 'JetBrains Mono', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif, monospace;
+  padding: 16px;
+  background-color: var(--body-bg);
+  color: var(--text-color);
+  margin: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 1180px) {
+  body {
+    padding: 24px;
+  }
+}

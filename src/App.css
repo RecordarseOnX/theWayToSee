@@ -1,0 +1,55 @@
+/* ========== 全局基础样式 ========== */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background: #f4f7f9;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+}
+
+/* 
+  ✅ 已删除所有 .header, .header-content, .toSeeBtn, .devBtn 的样式规则
+*/
+
+/* TimeTableContainer 的外部包裹容器 */
+.timetable-wrapper {
+  padding: 14px 14px 14px 14px; /* 去掉顶部内边距 */
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ========== 弹窗样式 (保持不变) ========== */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.2);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 200;
+}
+
+.modal-content {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(16px);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 20px 28px;
+  min-width: 280px;
+  animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+  .timetable-wrapper {
+    padding-top: 0;
+  }
+}

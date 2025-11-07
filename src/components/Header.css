@@ -1,0 +1,102 @@
+.header {
+  width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  padding: 12px 24px;
+  box-sizing: border-box;
+  background: transparent;
+  border-bottom: none;
+  transition: padding 0.3s ease;
+}
+
+.header-content {
+  max-width: 1320px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  /* We remove justify-content here and control spacing manually */
+  position: relative;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+/* --- PC / Default Styles --- */
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* Space between ToSee and CP buttons */
+  flex-shrink: 0;
+}
+.header-left-right {
+  display: flex;
+  gap: 12px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  /* Let this element take its natural width on desktop */
+  flex: 0 0 auto;      /* no grow, no shrink, auto basis */
+  margin-left: auto;   /* <-- KEY: push this whole block to the far right in the flex row */
+  justify-content: flex-end; /* ensure inner contents align right inside this box */
+  gap: 8px;            /* optional: spacing between loader items */
+}
+/* ✅ THIS IS THE KEY FIX FOR PC LAYOUT */
+.header-center {
+  /* This makes the center element expand to fill all available space,
+     pushing the left and right elements to the edges. */
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  flex-shrink: 0;
+}
+
+.header-right svg {
+  margin-right: 6px;
+  vertical-align: middle;
+  color: #6c63ff;
+}
+
+/* --- Mobile Optimization --- */
+@media (max-width: 768px) {
+  .header {
+    position: static;
+    padding: 8px 14px 6px;
+  }
+
+  .header-content {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  .header-left {
+    width: 100%;
+    display: flex;
+    justify-content: space-between; /* 左右两个部分 */
+    align-items: center;
+  }
+
+  .header-left-right {
+    justify-content: flex-end; /* 右边按钮靠右 */
+  }
+
+  .header-center {
+    position: absolute;
+    left: 50%;
+    top: 17px;
+    transform: translate(-50%, -50%);
+    margin: 0;
+  }
+
+  .header-right {
+    flex-basis: 100%;
+    width: 100%;
+    min-width: 100%;
+    order: 3;              /* 强制到最后一行 */
+    justify-content: flex-start; /* 左对齐内部文本 */
+    margin-left: 0; /* reset margin-left:auto for mobile */
+  }
+}
