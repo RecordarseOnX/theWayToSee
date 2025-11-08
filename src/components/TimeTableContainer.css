@@ -159,4 +159,23 @@ td.marked { background: transparent; }
   #timetable-wrapper {
     padding: 0px !important; /* 原本可能由父容器或 gap 导致距离较大 */
   }
+
+  /* ✅ 新增：移动端 tbody th 优化 - 减小字体、调整高度和省略 */
+  tbody th {
+    font-size: 11px !important; /* 减小字体大小，防止省略 */
+    height: 40px !important; /* 略微减小行高，适应小屏 */
+    padding: 2px !important; /* 添加少量内边距，避免内容贴边 */
+    white-space: nowrap !important; /* 强制不换行 */
+    overflow: hidden !important; /* 确保隐藏溢出 */
+    text-overflow: ellipsis !important; /* 省略号显示 */
+  }
+
+  /* 可选：如果 th 内容仍长，可进一步调整宽度或全局表宽 */
+  table {
+    font-size: 12px !important; /* 全局表字体微调，影响 td 一致性 */
+  }
+
+  td {
+    font-size: 11px !important; /* 统一 td 字体，避免不协调 */
+  }
 }
