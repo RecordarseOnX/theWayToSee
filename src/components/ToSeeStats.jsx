@@ -10,13 +10,16 @@ import {
   Plane, TrainFront, TramFront,
   Clock, Wallet, PlusCircle,
   Loader2, Check, X,
-  CalendarDays
+  CalendarDays, Lock
 } from "lucide-react";
 
 export default function ToSeeStats({ onSummaryChange }) {
   const [open, setOpen] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [password, setPassword] = useState('');
   const [records, setRecords] = useState([]);
   const modalRef = useRef(null);
+  const passwordModalRef = useRef(null);
   const [outboundMode, setOutboundMode] = useState("plane");
   const [returnMode, setReturnMode] = useState(null);
   const [form, setForm] = useState({
@@ -26,6 +29,9 @@ export default function ToSeeStats({ onSummaryChange }) {
   });
   const [submitState, setSubmitState] = useState('idle');
 
+  // 纯前端硬编码 PIN（改成你自己的 6 位数字）
+  const CORRECT_PASSWORD = '252799';
+
   const modeDetails = {
     plane: { icon: <Plane size={16} />, text: "飞机" },
     train: { icon: <TrainFront size={16} />, text: "火车" },
@@ -33,15 +39,13 @@ export default function ToSeeStats({ onSummaryChange }) {
   };
 
   const handleDateTimeChange = (field) => (date) => {
-    const oldDate = form[field] || new Date(); // Fallback to current date if null
+    const oldDate = form[field] || new Date();
     const newDate = new Date(date);
     const oldDateOnly = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate());
     const newDateOnly = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
     if (oldDateOnly.getTime() === newDateOnly.getTime()) {
-      // 时间变化
       setForm({ ...form, [field]: newDate });
     } else {
-      // 日期变化，保留时间
       const preserved = new Date(newDate);
       preserved.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds(), oldDate.getMilliseconds());
       setForm({ ...form, [field]: preserved });
@@ -67,6 +71,20 @@ export default function ToSeeStats({ onSummaryChange }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [open]);
+
+  useEffect(() => {
+    const handlePasswordClickOutside = (e) => {
+      if (showPasswordModal && passwordModalRef.current && !passwordModalRef.current.contains(e.target)) {
+        setShowPasswordModal(false);
+        setPassword('');
+        setSubmitState('idle');
+      }
+    };
+    if (showPasswordModal) {
+      document.addEventListener("mousedown", handlePasswordClickOutside);
+    }
+    return () => document.removeEventListener("mousedown", handlePasswordClickOutside);
+  }, [showPasswordModal]);
 
   useEffect(() => {
     const summaryByMode = { plane: { cost: 0, minutes: 0 }, train: { cost: 0, minutes: 0 }, highspeed: { cost: 0, minutes: 0 }, taxi: 0 };
@@ -99,14 +117,7 @@ export default function ToSeeStats({ onSummaryChange }) {
     return { timeText: `${h}小时${m}分`, costText: `${totalCost}` };
   };
 
-  const handleAdd = async () => {
-    if (submitState !== 'idle') return;
-    if (!form.departDateTime || !form.arriveDateTime || !outboundMode || !form.fee) {
-      setSubmitState('error');
-      setTimeout(() => setSubmitState('idle'), 2000);
-      return;
-    }
-    setSubmitState('submitting');
+  const performInsert = async () => {
     try {
       const groupId = crypto.randomUUID();
       const recordsToInsert = [];
@@ -119,13 +130,54 @@ export default function ToSeeStats({ onSummaryChange }) {
       }
       const { data, error } = await supabase.from("trips").insert(recordsToInsert).select();
       if (error) throw error;
+      setRecords(prevRecords => [...data, ...prevRecords]);  // 用 prev 避免闭包问题
       setSubmitState('success');
-      setRecords([...data, ...records]);
-      setTimeout(() => { setOpen(false); setSubmitState('idle'); }, 1500);
+      setTimeout(() => { 
+        setOpen(false); 
+        setShowPasswordModal(false); 
+        setSubmitState('idle'); 
+        setPassword('');
+      }, 1500);
     } catch (error) {
       console.error("Error adding trip records:", error);
       setSubmitState('error');
       setTimeout(() => setSubmitState('idle'), 2000);
+    }
+  };
+
+  const handleAdd = () => {
+    if (submitState !== 'idle') return;
+    if (!form.departDateTime || !form.arriveDateTime || !outboundMode || !form.fee) {
+      setSubmitState('error');
+      setTimeout(() => setSubmitState('idle'), 2000);
+      return;
+    }
+    setSubmitState('waiting');
+    setShowPasswordModal(true);
+  };
+
+  const handlePasswordSubmit = () => {
+    if (password.length !== 6 || !/^\d{6}$/.test(password)) {
+      // 无效 PIN，提示或直接清空
+      setPassword('');
+      return;
+    }
+    if (password === CORRECT_PASSWORD) {
+      setSubmitState('submitting');
+      performInsert();
+    } else {
+      // PIN 错误
+      setPassword('');
+      console.error('PIN 错误');
+      setSubmitState('error');
+      setTimeout(() => setSubmitState('waiting'), 2000);
+      // 可加 alert('PIN 错误，请重试'); 但弹窗太烦，就控制台了
+    }
+  };
+
+  const handlePasswordKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handlePasswordSubmit();
     }
   };
   
@@ -133,6 +185,7 @@ export default function ToSeeStats({ onSummaryChange }) {
 
   const renderSubmitButtonContent = () => {
     switch (submitState) {
+      case 'waiting': return <><PlusCircle size={18} /> <span>输入PIN确认</span></>;
       case 'submitting': return <Loader2 size={18} className="spinner" />;
       case 'success': return <Check size={18} />;
       case 'error': return <X size={18} />;
@@ -220,6 +273,32 @@ export default function ToSeeStats({ onSummaryChange }) {
             </div>
             <button id="addBtn" className={`state-${submitState}`} onClick={handleAdd} disabled={submitState !== 'idle'}>
               {renderSubmitButtonContent()}
+            </button>
+          </div>
+        </div>
+      )}
+      {showPasswordModal && (
+        <div className="passwordOverlay">
+          <div className="passwordModal" ref={passwordModalRef}>
+            <div className="passwordHeader">
+              <Lock size={20} className="passwordIcon" />
+            </div>
+            <input 
+              type="password" 
+              placeholder="PIN" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0,6))}  // 只数字，限6位
+              onKeyDown={handlePasswordKeyDown}
+              className="passwordInput"
+              autoFocus
+              maxLength={6}
+            />
+            <button 
+              className="passwordConfirmBtn" 
+              onClick={handlePasswordSubmit}
+              disabled={password.length !== 6}
+            >
+              确认
             </button>
           </div>
         </div>

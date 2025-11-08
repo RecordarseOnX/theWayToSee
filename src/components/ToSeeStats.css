@@ -1,4 +1,4 @@
-/* === ToSeeStats.css | 最终清理优化 + 布局修复版 === */
+/* === ToSeeStats.css | 最终清理优化 + 布局修复版 + 密码弹窗 === */
 
 /* --- 入口按钮 & 遮罩层 --- */
 .toSeeBtn {
@@ -16,6 +16,73 @@
   backdrop-filter: blur(3px); z-index: 1000; display: flex;
   justify-content: center; align-items: flex-start; padding-top: 8vh;
   animation: fadeIn 0.3s ease;
+}
+
+/* --- 密码弹窗遮罩层 --- */
+.passwordOverlay {
+  position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(5px); z-index: 1001; display: flex;
+  justify-content: center; align-items: flex-start; padding-top: 8vh;
+  animation: fadeIn 0.3s ease;
+}
+
+/* --- 密码弹窗主体 --- */
+.passwordModal {
+  width: 300px;
+  max-width: 90vw;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(138, 92, 246, 0.3);
+  padding: 20px;
+  color: #333;
+  animation: slideDown 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(138, 92, 246, 0.2);
+}
+
+.passwordHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.passwordIcon {
+  color: #8a5cf6;
+}
+
+.passwordInput {
+  width: 100%; height: 40px; padding: 8px 12px; box-sizing: border-box;
+  border: 1px solid #d1d5db; border-radius: 8px; font-size: 14px;
+  background: #f9fafb; transition: border-color 0.2s ease, background-color 0.2s ease;
+  text-align: center;
+}
+
+.passwordInput:focus {
+  border-color: #8a5cf6; outline: none; background: #fff;
+  box-shadow: 0 0 0 2px rgba(138, 92, 246, 0.1);
+}
+
+.passwordConfirmBtn {
+  width: 100%; padding: 10px; background: linear-gradient(135deg, #8a5cf6, #a78bfa);
+  border: none; border-radius: 8px; color: white; font-size: 15px; cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+.passwordConfirmBtn:hover:not(:disabled) { 
+  background: linear-gradient(135deg, #7c3aed, #8a5cf6);
+  transform: scale(1.02);
+}
+
+.passwordConfirmBtn:active { transform: scale(0.98); }
+.passwordConfirmBtn:disabled { 
+  background: #d1d5db; cursor: not-allowed; transform: none;
 }
 
 /* --- 弹窗主体 --- */
@@ -121,13 +188,15 @@
   margin-top: 4px; display: flex; align-items: center; justify-content: center;
   gap: 8px; transition: background-color 0.3s ease, transform 0.1s ease;
 }
-#addBtn:hover { background: #7c3aed; }
-#addBtn:active { transform: scale(0.98); }
+#addBtn:hover:not(:disabled) { background: #7c3aed; }
+#addBtn:active:not(:disabled) { transform: scale(0.98); }
 #addBtn.state-idle { background: #8a5cf6; }
-#addBtn.state-idle:hover { background: #7c3aed; }
+#addBtn.state-idle:hover:not(:disabled) { background: #7c3aed; }
+#addBtn.state-waiting { background: #a78bfa; cursor: default; }
 #addBtn.state-submitting { background: #a78bfa; cursor: wait; }
 #addBtn.state-success { background: #22c55e; }
 #addBtn.state-error { background: #ef4444; }
+#addBtn:disabled { cursor: not-allowed; opacity: 0.7; }
 
 /* --- 动画 & 移动端 --- */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
@@ -143,4 +212,5 @@
     height: 34px; padding: 0 16px; display: flex;
     align-items: center; justify-content: center;
   }
+  .passwordModal { width: 280px; padding: 16px; }
 }

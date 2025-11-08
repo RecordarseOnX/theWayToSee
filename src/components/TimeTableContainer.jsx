@@ -1,29 +1,24 @@
-// src/components/TimeTableContainer.jsx
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import './TimeTableContainer.css'; // <-- 添加这一行
+import './TimeTableContainer.css';
+import { supabase } from '../supabaseClient';
 
-// 常量可以保留在这个文件中，因为它们与时间表强相关
+// --- 常量和辅助函数 ---
 const DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 const HOURS = Array.from({ length: 14 }, (_, i) => i + 8);
 const PRESET_COLORS = ['#4caf50', '#2196f3', '#ff9800', '#9c27b0', ' #e91e63', '#795548'];
 
-// 计算当前周和下周的日期（以周一为一周开始）
 function getWeekDates() {
   const now = new Date();
-  const day = now.getDay(); // 周日=0, 周一=1, ...
-  const mondayOffset = day === 0 ? -6 : 1 - day; // 找到本周一
+  const day = now.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
   const monday = new Date(now);
   monday.setDate(now.getDate() + mondayOffset);
-
   const formatDate = (date) => {
     const d = date.getDate();
     return d < 10 ? `0${d}` : `${d}`;
   };
-
   const thisWeek = [];
   const nextWeek = [];
-
   for (let i = 0; i < 7; i++) {
     const d1 = new Date(monday);
     d1.setDate(monday.getDate() + i);
@@ -32,14 +27,12 @@ function getWeekDates() {
     thisWeek.push(formatDate(d1));
     nextWeek.push(formatDate(d2));
   }
-
-  return [thisWeek, nextWeek]; // [本周日期数组, 下周日期数组]
+  return [thisWeek, nextWeek];
 }
 
-
-// 接收 savedEvents 和 setSavedEvents 作为 props
-function TimeTableContainer({ savedEvents, setSavedEvents }) {
-  // --- 所有与交互相关的 state 和 ref 都留在这里 ---
+// --- 主组件 ---
+export default function TimeTableContainer() {
+  const [savedEvents, setSavedEvents] = useState({});
   const [eventToDeleteId, setEventToDeleteId] = useState(null);
   const [overlays, setOverlays] = useState([]);
   const [confirmBtn, setConfirmBtn] = useState({ visible: false, x: 0, y: 0 });
@@ -52,12 +45,21 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
   const hadDragSelectionRef = useRef(false);
   const suppressNextClickRef = useRef(false);
 
-  // --- 所有 Hooks 和处理函数都从 App.jsx 迁移至此 ---
   useEffect(() => {
-    // 这个 effect 现在依赖于从 props 传来的 savedEvents
-    localStorage.setItem('tableMarks_events_v2', JSON.stringify(savedEvents));
-    setTimeout(() => renderOverlays(eventToDeleteId), 0);
-  }, [savedEvents, eventToDeleteId]);
+    const fetchEvents = async () => {
+      const { data, error } = await supabase.from('timetable_events').select('*');
+      if (error) {
+        console.error('Error fetching events:', error);
+      } else {
+        const eventsObject = data.reduce((acc, event) => {
+          acc[event.id] = { text: event.event_text, color: event.color, cells: event.cells };
+          return acc;
+        }, {});
+        setSavedEvents(eventsObject);
+      }
+    };
+    fetchEvents();
+  }, []);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -143,35 +145,57 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
     }
   }, [updateConfirmButton]);
 
-  const handleSaveEvent = useCallback((text, color) => {
+  const handleSaveEvent = useCallback(async (text, color) => {
     if (!text) return;
     const selected = Array.from(document.querySelectorAll('td.active'));
     if (!selected.length) return;
-    const eventId = 'ev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+    
     const newCells = selected.map(td => ({
       tableId: td.closest('.table-wrap').dataset.tableId,
       day: DAYS[td.cellIndex - 1],
       hour: HOURS[td.parentNode.rowIndex - 1],
     }));
-    setSavedEvents(prev => ({ ...prev, [eventId]: { text, color, cells: newCells } }));
-    selected.forEach(td => td.classList.remove('active'));
-    setFormVisible(false);
-    setConfirmBtn({ visible: false, x: 0, y: 0 });
-  }, [setSavedEvents]); // 注意这里的依赖变成了 props 传来的 setSavedEvents
 
-  const handleDeleteEvent = useCallback(() => {
+    const newEventData = { event_text: text, color, cells: newCells };
+
+    const { data, error } = await supabase.from('timetable_events').insert(newEventData).select();
+
+    if (error) {
+      console.error('Error saving event:', error);
+      alert('保存失败，请查看控制台');
+    } else {
+      const newEvent = data[0];
+      setSavedEvents(prev => ({
+        ...prev,
+        [newEvent.id]: { text: newEvent.event_text, color: newEvent.color, cells: newEvent.cells }
+      }));
+      selected.forEach(td => td.classList.remove('active'));
+      setFormVisible(false);
+      setConfirmBtn({ visible: false, x: 0, y: 0 });
+    }
+  }, []);
+
+  const handleDeleteEvent = useCallback(async () => {
     if (!eventToDeleteId) return;
-    setSavedEvents(prev => {
+    const { error } = await supabase.from('timetable_events').delete().match({ id: eventToDeleteId });
+    if (error) {
+      console.error('Error deleting event:', error);
+      alert('删除失败，请查看控制台');
+    } else {
+      setSavedEvents(prev => {
         const newEvents = { ...prev };
         delete newEvents[eventToDeleteId];
         return newEvents;
-    });
-    clearActiveAndDeleteMode();
-  }, [eventToDeleteId, clearActiveAndDeleteMode, setSavedEvents]); // 注意依赖
+      });
+      clearActiveAndDeleteMode();
+    }
+  }, [eventToDeleteId, clearActiveAndDeleteMode]);
 
   const renderOverlays = useCallback((deletionId) => {
     if (!containerRef.current) return;
     const newOverlays = [];
+    if (!savedEvents) return; // Add a guard for safety
+
     containerRef.current.querySelectorAll('.table-wrap').forEach(wrap => {
         const table = wrap.querySelector('table');
         if (!table.tBodies[0]) return;
@@ -181,14 +205,11 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
             let curEventId = null, cells = [];
             for (let r = 0; r < rows.length; r++) {
                 const td = rows[r].cells[col + 1];
-                
-                // ✅ 第 1 处修复：在这里添加安全检查
-                const eventId = savedEvents && Object.keys(savedEvents).find(id => 
-                    savedEvents[id]?.cells.some(c => 
+                const eventId = Object.keys(savedEvents).find(id => 
+                    savedEvents[id].cells.some(c => 
                         c.tableId === wrap.dataset.tableId && c.hour == td.dataset.hour && c.day === DAYS[td.dataset.col]
                     )
                 );
-
                 if (eventId) {
                     if (curEventId === eventId) { cells.push(td); } 
                     else {
@@ -204,7 +225,7 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
         }
         const wrapRect = wrap.getBoundingClientRect();
         groups.forEach(g => {
-            const eventData = savedEvents?.[g.eventId]; // 使用可选链以防万一
+            const eventData = savedEvents[g.eventId];
             if (!eventData) return;
             const first = g.cells[0];
             const last = g.cells[g.cells.length - 1];
@@ -228,7 +249,6 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
         <TimeTable 
             tableId="A"
             savedEvents={savedEvents}
-            eventToDeleteId={eventToDeleteId}
             onCellMouseDown={handleCellMouseDown}
             onCellMouseEnter={handleCellMouseEnter}
             overlays={overlays.filter(o => o.parentId === 'A')}
@@ -236,7 +256,6 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
         <TimeTable 
             tableId="B"
             savedEvents={savedEvents}
-            eventToDeleteId={eventToDeleteId}
             onCellMouseDown={handleCellMouseDown}
             onCellMouseEnter={handleCellMouseEnter}
             overlays={overlays.filter(o => o.parentId === 'B')}
@@ -254,9 +273,9 @@ function TimeTableContainer({ savedEvents, setSavedEvents }) {
   );
 }
 
-// --- Sub-components can remain in the same file as they are tightly coupled ---
+// --- 子组件 ---
 
-function TimeTable({ tableId, savedEvents, eventToDeleteId, onCellMouseDown, onCellMouseEnter, overlays }) {
+function TimeTable({ tableId, savedEvents, onCellMouseDown, onCellMouseEnter, overlays }) {
   const [thisWeek, nextWeek] = getWeekDates();
   const weekDates = tableId === 'A' ? thisWeek : nextWeek;
 
@@ -265,14 +284,12 @@ function TimeTable({ tableId, savedEvents, eventToDeleteId, onCellMouseDown, onC
       <table>
         <thead>
           <tr>
-            <th></th>
+            <th>{tableId === 'A' ? 'See' : 'You'}</th>
             {['一', '二', '三', '四', '五', '六', '日'].map((day, i) => (
               <th key={day}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <span>{day}</span>
-                  <span style={{ fontSize: '11px', color: '#777', marginTop: '2px' }}>
-                    {weekDates[i]}
-                  </span>
+                  <span style={{ fontSize: '11px', color: '#777', marginTop: '2px' }}>{weekDates[i]}</span>
                 </div>
               </th>
             ))}
@@ -283,12 +300,9 @@ function TimeTable({ tableId, savedEvents, eventToDeleteId, onCellMouseDown, onC
             <tr key={hour}>
               <th>{String(hour).padStart(2, '0')}:00</th>
               {DAYS.map((day, colIdx) => {
-                  
-                  // ✅ 第 2 处修复：在这里添加同样的安全检查
                   const eventId = savedEvents && Object.keys(savedEvents).find(id => 
                     savedEvents[id]?.cells.some(c => c.tableId === tableId && c.hour === hour && c.day === day)
                   );
-
                   return (
                     <td
                       key={day}
@@ -342,5 +356,3 @@ function EventForm({ onSave }) {
     </div>
   );
 }
-
-export default TimeTableContainer;
