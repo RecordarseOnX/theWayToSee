@@ -107,9 +107,20 @@ td.marked { background: transparent; }
   transform: translate(-50%, -50%);
 }
 #formBox input {
-  width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ddd;
-  border-radius: 4px; font-size: 16px;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  font-size: 16px;
+  outline: none; /* 移除默认的蓝色轮廓 */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease; /* 添加平滑过渡 */
 }
+
+#formBox input:focus {
+  border-color: #8a5cf6; /* 边框变为紫色 */
+}
+
 #formBox .form-footer {
   display: flex; justify-content: space-between; align-items: center;
 }
@@ -119,13 +130,20 @@ td.marked { background: transparent; }
   border: 2px solid transparent; transition: transform 0.2s, border-color 0.2s;
 }
 .color-option:hover { transform: scale(1.15); }
+
 .color-option.selected {
-  border-color: #fff; box-shadow: 0 0 0 2px #007bff;
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #8a5cf6; /* 从蓝色改为紫色 */
 }
+
+/* ✅ 优化：将保存按钮也改为紫色 */
 #saveBtn {
-  width: 36px; height: 36px; background: #007bff; color: #fff; border: none;
-  border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  font-size: 22px; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+  width: 36px; height: 36px;
+  background: #8a5cf6; /* 从蓝色改为紫色 */
+  color: #fff; border: none; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 #saveBtn::before { content: '✓'; }
 

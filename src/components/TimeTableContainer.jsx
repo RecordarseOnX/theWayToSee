@@ -344,11 +344,25 @@ function EventForm({ onSave }) {
   const handleKeyDown = (e) => { if (e.key === 'Enter') { handleSave(); } };
   return (
     <div id="formBox" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
-      <input ref={inputRef} id="eventText" placeholder="输入事件内容..." value={text} onChange={(e) => setText(e.target.value)} onKeyDown={handleKeyDown} />
+      {/* ✅ 关键改动：添加 autoComplete="off" */}
+      <input 
+        ref={inputRef} 
+        id="eventText" 
+        placeholder="输入事件内容..." 
+        value={text} 
+        onChange={(e) => setText(e.target.value)} 
+        onKeyDown={handleKeyDown}
+        autoComplete="off" 
+      />
       <div className="form-footer">
         <div id="colorPalette">
           {PRESET_COLORS.map(color => (
-            <div key={color} className={`color-option ${selectedColor === color ? 'selected' : ''}`} style={{ backgroundColor: color }} onClick={() => setSelectedColor(color)} />
+            <div 
+              key={color} 
+              className={`color-option ${selectedColor === color ? 'selected' : ''}`} 
+              style={{ backgroundColor: color }} 
+              onClick={() => setSelectedColor(color)} 
+            />
           ))}
         </div>
         <button id="saveBtn" onClick={handleSave}></button>
