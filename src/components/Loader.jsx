@@ -16,7 +16,7 @@ const Loader = ({ words = ["暂无数据"], interval = 3000, width = 400 }) => {
     <StyledWrapper $width={width}>
       <div className="card">
         <div className="loader">
-          <p className="loader-prefix">你要知道</p>
+          <p className="loader-prefix">要知道</p>
           <div className="viewport">
             <span key={idx} className="word">
               {list[idx]}

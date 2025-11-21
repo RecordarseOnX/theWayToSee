@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, forwardRef } from "react";
 import "./ToSeeStats.css";
 import { supabase } from "../supabaseClient";
 import DatePicker, { registerLocale } from "react-datepicker";
@@ -13,6 +13,132 @@ import {
   CalendarDays, Lock
 } from "lucide-react";
 
+// --- 辅助组件：自定义 DatePicker 触发器 ---
+// 这确保了点击整个左侧区域都能打开日历，且无需处理层级遮挡问题
+const DateTrigger = forwardRef(({ value, onClick, className }, ref) => (
+  <div className={className} onClick={onClick} ref={ref}>
+    <CalendarDays size={14} className="input-icon-left" />
+    <span className="date-text-display">{value}</span>
+  </div>
+));
+
+// --- 子组件：日期+自动纠错时间输入 ---
+const DateTimeInput = ({ value, onChange }) => {
+  const date = value instanceof Date && !isNaN(value) ? value : new Date();
+
+  // 本地状态：解决 "输入2立马变成02" 的BUG
+  // 只有当 date 改变且用户不在输入时，才同步 prop 到 state
+  const [hStr, setHStr] = useState(String(date.getHours()).padStart(2, '0'));
+  const [mStr, setMStr] = useState(String(date.getMinutes()).padStart(2, '0'));
+
+  // 当外部 date 变化时（比如选了日期），同步时间显示
+  // 但为了防止打字时跳变，这里我们加一个简单的判断：如果数值一样就不覆盖字符串
+  useEffect(() => {
+    const propH = date.getHours();
+    const propM = date.getMinutes();
+    if (parseInt(hStr) !== propH) setHStr(String(propH).padStart(2, '0'));
+    if (parseInt(mStr) !== propM) setMStr(String(propM).padStart(2, '0'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date]); 
+
+  const updateTime = (newH, newM) => {
+    const newDate = new Date(date);
+    newDate.setHours(newH);
+    newDate.setMinutes(newM);
+    onChange(newDate);
+  };
+
+  const handleHourChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '');
+    setHStr(val); // 允许显示 "2"，不立即补零
+    if (val === '') return;
+    
+    let num = parseInt(val, 10);
+    if (!isNaN(num)) {
+      if (num > 23) { num = 23; setHStr('23'); } // 立即纠错
+      updateTime(num, date.getMinutes());
+    }
+  };
+
+  const handleMinuteChange = (e) => {
+    const val = e.target.value.replace(/\D/g, '');
+    setMStr(val);
+    if (val === '') return;
+
+    let num = parseInt(val, 10);
+    if (!isNaN(num)) {
+      if (num > 59) { num = 59; setMStr('59'); }
+      updateTime(date.getHours(), num);
+    }
+  };
+
+  // 失去焦点时，强制补零格式化
+  const handleBlur = (type) => () => {
+    if (type === 'hour') {
+      let num = parseInt(hStr || '0', 10);
+      setHStr(String(num).padStart(2, '0'));
+      updateTime(num, date.getMinutes());
+    } else {
+      let num = parseInt(mStr || '0', 10);
+      setMStr(String(num).padStart(2, '0'));
+      updateTime(date.getHours(), num);
+    }
+  };
+
+  return (
+    <div className="custom-datetime-wrapper">
+      {/* 左侧：日期选择 (使用 customInput 完美解决点击区域问题) */}
+      <div className="date-part-wrapper">
+        <DatePicker
+          selected={date}
+          onChange={(d) => {
+            const newDate = new Date(d);
+            newDate.setHours(date.getHours());
+            newDate.setMinutes(date.getMinutes());
+            onChange(newDate);
+          }}
+          dateFormat="yyyy/MM/dd"
+          locale="zh-CN"
+          // 关键优化：使用 customInput 让整个 div 成为触发器
+          customInput={<DateTrigger className="date-trigger-box" />}
+          popperPlacement="bottom-start"
+          portalId="root-datepicker"
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="divider"></div>
+
+      {/* 右侧：时分输入 */}
+      <div className="time-part">
+        <Clock size={14} className="input-icon-left" />
+        <input
+          type="text"
+          className="time-input"
+          value={hStr}
+          onChange={handleHourChange}
+          onBlur={handleBlur('hour')}
+          maxLength={2}
+          onFocus={(e) => e.target.select()}
+          inputMode="numeric" 
+        />
+        <span className="time-colon">:</span>
+        <input
+          type="text"
+          className="time-input"
+          value={mStr}
+          onChange={handleMinuteChange}
+          onBlur={handleBlur('minute')}
+          maxLength={2}
+          onFocus={(e) => e.target.select()}
+          inputMode="numeric"
+        />
+      </div>
+    </div>
+  );
+};
+
+// --- 主组件 ---
 export default function ToSeeStats({ onSummaryChange }) {
   const [open, setOpen] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -22,34 +148,20 @@ export default function ToSeeStats({ onSummaryChange }) {
   const passwordModalRef = useRef(null);
   const [outboundMode, setOutboundMode] = useState("plane");
   const [returnMode, setReturnMode] = useState(null);
+  
   const [form, setForm] = useState({
     flightNumber: "", departDateTime: new Date(), arriveDateTime: new Date(),
     fee: "", taxiFee: "", returnFlight: "", returnDepart: new Date(),
     returnArrive: new Date(), returnFee: "", returnTaxi: "",
   });
+  
   const [submitState, setSubmitState] = useState('idle');
-
-  // 纯前端硬编码 PIN（改成你自己的 6 位数字）
   const CORRECT_PASSWORD = '252799';
 
   const modeDetails = {
     plane: { icon: <Plane size={16} />, text: "飞机" },
     train: { icon: <TrainFront size={16} />, text: "火车" },
     highspeed: { icon: <TramFront size={16} />, text: "高铁" },
-  };
-
-  const handleDateTimeChange = (field) => (date) => {
-    const oldDate = form[field] || new Date();
-    const newDate = new Date(date);
-    const oldDateOnly = new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate());
-    const newDateOnly = new Date(newDate.getFullYear(), newDate.getMonth(), newDate.getDate());
-    if (oldDateOnly.getTime() === newDateOnly.getTime()) {
-      setForm({ ...form, [field]: newDate });
-    } else {
-      const preserved = new Date(newDate);
-      preserved.setHours(oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds(), oldDate.getMilliseconds());
-      setForm({ ...form, [field]: preserved });
-    }
   };
 
   useEffect(() => {
@@ -80,9 +192,7 @@ export default function ToSeeStats({ onSummaryChange }) {
         setSubmitState('idle');
       }
     };
-    if (showPasswordModal) {
-      document.addEventListener("mousedown", handlePasswordClickOutside);
-    }
+    if (showPasswordModal) document.addEventListener("mousedown", handlePasswordClickOutside);
     return () => document.removeEventListener("mousedown", handlePasswordClickOutside);
   }, [showPasswordModal]);
 
@@ -130,7 +240,7 @@ export default function ToSeeStats({ onSummaryChange }) {
       }
       const { data, error } = await supabase.from("trips").insert(recordsToInsert).select();
       if (error) throw error;
-      setRecords(prevRecords => [...data, ...prevRecords]);  // 用 prev 避免闭包问题
+      setRecords(prevRecords => [...data, ...prevRecords]);
       setSubmitState('success');
       setTimeout(() => { 
         setOpen(false); 
@@ -157,30 +267,12 @@ export default function ToSeeStats({ onSummaryChange }) {
   };
 
   const handlePasswordSubmit = () => {
-    if (password.length !== 6 || !/^\d{6}$/.test(password)) {
-      // 无效 PIN，提示或直接清空
-      setPassword('');
-      return;
-    }
-    if (password === CORRECT_PASSWORD) {
-      setSubmitState('submitting');
-      performInsert();
-    } else {
-      // PIN 错误
-      setPassword('');
-      console.error('PIN 错误');
-      setSubmitState('error');
-      setTimeout(() => setSubmitState('waiting'), 2000);
-      // 可加 alert('PIN 错误，请重试'); 但弹窗太烦，就控制台了
-    }
+    if (password.length !== 6 || !/^\d{6}$/.test(password)) { setPassword(''); return; }
+    if (password === CORRECT_PASSWORD) { setSubmitState('submitting'); performInsert(); } 
+    else { setPassword(''); setSubmitState('error'); setTimeout(() => setSubmitState('waiting'), 2000); }
   };
 
-  const handlePasswordKeyDown = (e) => {
-    if (e.key === 'Enter') {
-      handlePasswordSubmit();
-    }
-  };
-  
+  const handlePasswordKeyDown = (e) => { if (e.key === 'Enter') handlePasswordSubmit(); };
   const { timeText, costText } = calcSummary();
 
   const renderSubmitButtonContent = () => {
@@ -201,72 +293,44 @@ export default function ToSeeStats({ onSummaryChange }) {
           <div className="toSeeModal" ref={modalRef}>
             <div className="mode-buttons">{Object.keys(modeDetails).map((m) => (<button key={m} onClick={() => setOutboundMode(m)} className={outboundMode === m ? "active" : ""}>{modeDetails[m].icon} <span>{modeDetails[m].text}</span></button>))}</div>
             <input type="text" placeholder="去程班次号（可不填）" value={form.flightNumber} onChange={(e) => setForm({ ...form, flightNumber: e.target.value })}/>
+            
+            {/* 去程日期组：移除了中间的箭头，CSS Grid 布局实现并排 */}
             <div className="datetime-picker-group">
-              <div className="datepicker-wrapper">
-                <DatePicker
-                  selected={form.departDateTime}
-                  onChange={handleDateTimeChange('departDateTime')}
-                  showTimeInput
-                  timeInputLabel="时间:"
-                  locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm"
-                  className="custom-datepicker-input"
-                  portalId="root-datepicker"
-                />
-                <CalendarDays size={16} className="datepicker-icon" />
-              </div>
-              <div className="datepicker-wrapper">
-                <DatePicker
-                  selected={form.arriveDateTime}
-                  onChange={handleDateTimeChange('arriveDateTime')}
-                  showTimeInput
-                  timeInputLabel="时间:"
-                  locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm"
-                  className="custom-datepicker-input"
-                  portalId="root-datepicker"
-                />
-                <CalendarDays size={16} className="datepicker-icon" />
-              </div>
+              <DateTimeInput 
+                value={form.departDateTime} 
+                onChange={(date) => setForm({ ...form, departDateTime: date })} 
+              />
+              <DateTimeInput 
+                value={form.arriveDateTime} 
+                onChange={(date) => setForm({ ...form, arriveDateTime: date })} 
+              />
             </div>
+
             <div className="fee-group">
               <input type="number" placeholder="去程费用" value={form.fee} onChange={(e) => setForm({ ...form, fee: e.target.value })} />
               <input type="number" placeholder="打车费（可不填）" value={form.taxiFee} onChange={(e) => setForm({ ...form, taxiFee: e.target.value })} />
             </div>
+
             <div className="mode-buttons">{Object.keys(modeDetails).map((m) => (<button key={m} onClick={() => setReturnMode(current => (current === m ? null : m))} className={returnMode === m ? "active" : ""}>{modeDetails[m].icon} <span>{modeDetails[m].text}</span></button>))}</div>
             <input type="text" placeholder="返程班次号（可不填）" value={form.returnFlight} onChange={(e) => setForm({ ...form, returnFlight: e.target.value })} />
+            
+            {/* 返程日期组 */}
             <div className="datetime-picker-group">
-              <div className="datepicker-wrapper">
-                <DatePicker
-                  selected={form.returnDepart}
-                  onChange={handleDateTimeChange('returnDepart')}
-                  showTimeInput
-                  timeInputLabel="时间:"
-                  locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm"
-                  className="custom-datepicker-input"
-                  portalId="root-datepicker"
-                />
-                <CalendarDays size={16} className="datepicker-icon" />
-              </div>
-              <div className="datepicker-wrapper">
-                <DatePicker
-                  selected={form.returnArrive}
-                  onChange={handleDateTimeChange('returnArrive')}
-                  showTimeInput
-                  timeInputLabel="时间:"
-                  locale="zh-CN"
-                  dateFormat="yyyy/MM/dd HH:mm"
-                  className="custom-datepicker-input"
-                  portalId="root-datepicker"
-                />
-                <CalendarDays size={16} className="datepicker-icon" />
-              </div>
+              <DateTimeInput 
+                value={form.returnDepart} 
+                onChange={(date) => setForm({ ...form, returnDepart: date })} 
+              />
+              <DateTimeInput 
+                value={form.returnArrive} 
+                onChange={(date) => setForm({ ...form, returnArrive: date })} 
+              />
             </div>
+
             <div className="fee-group">
               <input type="number" placeholder="返程费用（可不填）" value={form.returnFee} onChange={(e) => setForm({ ...form, returnFee: e.target.value })} />
               <input type="number" placeholder="打车费（可不填）" value={form.returnTaxi} onChange={(e) => setForm({ ...form, returnTaxi: e.target.value })} />
             </div>
+            
             <div id="summary">
               <div className="summary-item"><Clock size={14} /><span>总耗时：{timeText}</span></div>
               <div className="summary-item"><Wallet size={14} /><span>总花费：￥{costText}</span></div>
@@ -283,23 +347,8 @@ export default function ToSeeStats({ onSummaryChange }) {
             <div className="passwordHeader">
               <Lock size={20} className="passwordIcon" />
             </div>
-            <input 
-              type="password" 
-              placeholder="PIN" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0,6))}  // 只数字，限6位
-              onKeyDown={handlePasswordKeyDown}
-              className="passwordInput"
-              autoFocus
-              maxLength={6}
-            />
-            <button 
-              className="passwordConfirmBtn" 
-              onClick={handlePasswordSubmit}
-              disabled={password.length !== 6}
-            >
-              确认
-            </button>
+            <input type="password" placeholder="PIN" value={password} onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0,6))} onKeyDown={handlePasswordKeyDown} className="passwordInput" autoFocus maxLength={6} />
+            <button className="passwordConfirmBtn" onClick={handlePasswordSubmit} disabled={password.length !== 6}>确认</button>
           </div>
         </div>
       )}

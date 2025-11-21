@@ -56,11 +56,11 @@ function Header({ onSecretOpen, photoUrls, ticketUrls, onClearCache }) {
       </span>,
       <span style={iconSpanStyle}>
         <TramFront size={16} strokeWidth={1.8} />
-        <span>等待下车的那几分钟总是很漫长{fmt(highspeed.minutes)}｜{highspeed.cost}</span>
+        <span>最后那几分钟总是很漫长{fmt(highspeed.minutes)}｜{highspeed.cost}</span>
       </span>,
       <span style={iconSpanStyle}>
         <TrainFront size={16} strokeWidth={1.8} />
-        <span>摇摇晃晃的路上能睡着该多好{fmt(train.minutes)}｜{train.cost}</span>
+        <span>摇晃的路上能睡着该多好{fmt(train.minutes)}｜{train.cost}</span>
       </span>,
       <span style={iconSpanStyle}>
         <CarTaxiFront size={16} strokeWidth={1.8} />

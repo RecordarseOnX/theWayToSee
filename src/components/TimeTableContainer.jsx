@@ -2,35 +2,48 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import './TimeTableContainer.css';
 import { supabase } from '../supabaseClient';
 
-// --- 常量和辅助函数 ---
-const DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 8);
-const PRESET_COLORS = ['#4caf50', '#2196f3', '#ff9800', '#9c27b0', ' #e91e63', '#795548'];
+// --- 常量 ---
+const MINT_BASE = '#f0fff4'; 
+const PRESET_GRADIENTS = [
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #a7f3d0 50%, ${MINT_BASE} 100%)`,
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #bae6fd 50%, ${MINT_BASE} 100%)`,
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #ddd6fe 50%, ${MINT_BASE} 100%)`,
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #fbcfe8 50%, ${MINT_BASE} 100%)`,
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #fde68a 50%, ${MINT_BASE} 100%)`,
+  `linear-gradient(135deg, ${MINT_BASE} 0%, #e2e8f0 50%, ${MINT_BASE} 100%)`,
+];
+
+const DAYS_LABEL = ['一', '二', '三', '四', '五', '六', '日'];
+const DAYS_KEY = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const HOURS = Array.from({ length: 14 }, (_, i) => i + 8); 
 
 function getWeekDates() {
   const now = new Date();
-  const day = now.getDay();
+  const day = now.getDay(); 
   const mondayOffset = day === 0 ? -6 : 1 - day;
   const monday = new Date(now);
   monday.setDate(now.getDate() + mondayOffset);
+
   const formatDate = (date) => {
-    const d = date.getDate();
-    return d < 10 ? `0${d}` : `${d}`;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   };
+
   const thisWeek = [];
   const nextWeek = [];
   for (let i = 0; i < 7; i++) {
     const d1 = new Date(monday);
     d1.setDate(monday.getDate() + i);
+    thisWeek.push(formatDate(d1));
     const d2 = new Date(monday);
     d2.setDate(monday.getDate() + 7 + i);
-    thisWeek.push(formatDate(d1));
     nextWeek.push(formatDate(d2));
   }
   return [thisWeek, nextWeek];
 }
 
-// --- 主组件 ---
 export default function TimeTableContainer() {
   const [savedEvents, setSavedEvents] = useState({});
   const [eventToDeleteId, setEventToDeleteId] = useState(null);
@@ -38,6 +51,7 @@ export default function TimeTableContainer() {
   const [confirmBtn, setConfirmBtn] = useState({ visible: false, x: 0, y: 0 });
   const [deleteBtn, setDeleteBtn] = useState({ visible: false, x: 0, y: 0 });
   const [isFormVisible, setFormVisible] = useState(false);
+  
   const containerRef = useRef(null);
   const isMouseDownRef = useRef(false);
   const toggleModeRef = useRef(null);
@@ -48,9 +62,7 @@ export default function TimeTableContainer() {
   useEffect(() => {
     const fetchEvents = async () => {
       const { data, error } = await supabase.from('timetable_events').select('*');
-      if (error) {
-        console.error('Error fetching events:', error);
-      } else {
+      if (!error) {
         const eventsObject = data.reduce((acc, event) => {
           acc[event.id] = { text: event.event_text, color: event.color, cells: event.cells };
           return acc;
@@ -71,15 +83,20 @@ export default function TimeTableContainer() {
       toggleModeRef.current = null;
       hadDragSelectionRef.current = false;
     };
+
     const handleDocumentClick = (e) => {
-      if (suppressNextClickRef.current) { suppressNextClickRef.current = false; return; }
-      if (e.target.closest('td') || e.target.closest('#confirmBtn') || e.target.closest('#formBox') || e.target.closest('#deleteBtn')) return;
+      if (suppressNextClickRef.current) return;
+      if (e.target.closest('td, #confirmBtn, #formBox, #deleteBtn')) return;
       clearActiveAndDeleteMode();
     };
+
+    // 支持 TouchEnd 全局清理
     document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchend', handleMouseUp);
     document.addEventListener('click', handleDocumentClick);
     return () => {
       document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleMouseUp);
       document.removeEventListener('click', handleDocumentClick);
     };
   }, []);
@@ -116,9 +133,12 @@ export default function TimeTableContainer() {
     });
   }, []);
 
+  // --- PC端 鼠标事件 ---
   const handleCellMouseDown = useCallback((e) => {
     const td = e.currentTarget;
-    e.preventDefault();
+    // 只有左键点击才触发选中 (避免右键菜单干扰)
+    if (e.button !== 0) return;
+
     const eventId = td.dataset.eventId;
     if (eventId) {
       setEventToDeleteId(eventId);
@@ -132,7 +152,6 @@ export default function TimeTableContainer() {
     td.classList.toggle('active', toggleModeRef.current);
     lastActiveCellRef.current = td;
     hadDragSelectionRef.current = false;
-    e.stopPropagation();
     updateConfirmButton();
   }, [updateConfirmButton]);
 
@@ -145,100 +164,135 @@ export default function TimeTableContainer() {
     }
   }, [updateConfirmButton]);
 
+  // --- 移动端 触摸事件 (新增逻辑) ---
+  const handleTouchStart = useCallback((e) => {
+    // 阻止默认事件可能导致无法点击，这里主要依靠 CSS 的 touch-action: none
+    const td = e.currentTarget;
+    const eventId = td.dataset.eventId;
+    
+    if (eventId) {
+        // 如果点击的是已有事件，走删除逻辑
+        setEventToDeleteId(eventId);
+        setConfirmBtn({ visible: false, x: 0, y: 0 });
+        const rect = td.getBoundingClientRect();
+        setDeleteBtn({ visible: true, x: rect.right + 8, y: rect.top + window.scrollY + (rect.height - 32) / 2 });
+        return;
+    }
+
+    // 开始选中逻辑
+    isMouseDownRef.current = true; // 复用 MouseDown 状态
+    toggleModeRef.current = !td.classList.contains('active');
+    td.classList.toggle('active', toggleModeRef.current);
+    lastActiveCellRef.current = td;
+    hadDragSelectionRef.current = false;
+    updateConfirmButton();
+  }, [updateConfirmButton]);
+
+  const handleTouchMove = useCallback((e) => {
+    // 阻止浏览器默认滚动行为 (前提是 CSS 加了 touch-action: none)
+    // 注意：如果想保留页面滚动，这里逻辑会变复杂，通常表格拖拽选区是互斥的
+    if (e.cancelable) e.preventDefault();
+
+    if (isMouseDownRef.current) {
+        const touch = e.touches[0];
+        // 核心：根据坐标找到当前手指下的元素
+        const target = document.elementFromPoint(touch.clientX, touch.clientY);
+        
+        // 确保目标是 td，且是我们表格里的 td
+        if (target && target.tagName === 'TD' && target !== lastActiveCellRef.current && containerRef.current.contains(target)) {
+            hadDragSelectionRef.current = true;
+            target.classList.toggle('active', toggleModeRef.current);
+            lastActiveCellRef.current = target;
+            updateConfirmButton();
+        }
+    }
+  }, [updateConfirmButton]);
+
+  // --- 数据操作 ---
   const handleSaveEvent = useCallback(async (text, color) => {
     if (!text) return;
     const selected = Array.from(document.querySelectorAll('td.active'));
     if (!selected.length) return;
-    
     const newCells = selected.map(td => ({
-      tableId: td.closest('.table-wrap').dataset.tableId,
-      day: DAYS[td.cellIndex - 1],
-      hour: HOURS[td.parentNode.rowIndex - 1],
+      date: td.dataset.date,
+      hour: parseInt(td.dataset.hour, 10),
     }));
-
     const newEventData = { event_text: text, color, cells: newCells };
-
     const { data, error } = await supabase.from('timetable_events').insert(newEventData).select();
-
-    if (error) {
-      console.error('Error saving event:', error);
-      alert('保存失败，请查看控制台');
-    } else {
+    if (!error && data.length > 0) {
       const newEvent = data[0];
       setSavedEvents(prev => ({
         ...prev,
         [newEvent.id]: { text: newEvent.event_text, color: newEvent.color, cells: newEvent.cells }
       }));
-      selected.forEach(td => td.classList.remove('active'));
-      setFormVisible(false);
-      setConfirmBtn({ visible: false, x: 0, y: 0 });
+      clearActiveAndDeleteMode();
+    } else {
+      alert('保存失败');
     }
-  }, []);
+  }, [clearActiveAndDeleteMode]);
 
   const handleDeleteEvent = useCallback(async () => {
     if (!eventToDeleteId) return;
     const { error } = await supabase.from('timetable_events').delete().match({ id: eventToDeleteId });
-    if (error) {
-      console.error('Error deleting event:', error);
-      alert('删除失败，请查看控制台');
-    } else {
+    if (!error) {
       setSavedEvents(prev => {
-        const newEvents = { ...prev };
-        delete newEvents[eventToDeleteId];
-        return newEvents;
+        const next = { ...prev };
+        delete next[eventToDeleteId];
+        return next;
       });
       clearActiveAndDeleteMode();
     }
   }, [eventToDeleteId, clearActiveAndDeleteMode]);
 
   const renderOverlays = useCallback((deletionId) => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !savedEvents) return;
     const newOverlays = [];
-    if (!savedEvents) return; // Add a guard for safety
-
+    const pushOverlay = (eventId, cells, wrap) => {
+      const eventData = savedEvents[eventId];
+      if (!eventData) return;
+      const first = cells[0];
+      const last = cells[cells.length - 1];
+      const r1 = first.getBoundingClientRect();
+      const r2 = last.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      newOverlays.push({
+        key: `${eventId}-${first.dataset.date}-${first.dataset.hour}`,
+        left: r1.left - wrapRect.left,
+        top: r1.top - wrapRect.top,
+        width: r1.width,
+        height: r2.bottom - r1.top,
+        text: eventData.text,
+        color: eventData.color, 
+        isToDelete: eventId === deletionId,
+        parentId: wrap.dataset.tableId,
+      });
+    };
     containerRef.current.querySelectorAll('.table-wrap').forEach(wrap => {
         const table = wrap.querySelector('table');
-        if (!table.tBodies[0]) return;
+        if (!table?.tBodies[0]) return;
         const rows = Array.from(table.tBodies[0].rows);
-        const groups = [];
         for (let col = 0; col < 7; col++) {
             let curEventId = null, cells = [];
             for (let r = 0; r < rows.length; r++) {
                 const td = rows[r].cells[col + 1];
+                const cellDate = td.dataset.date;
+                const cellHour = parseInt(td.dataset.hour, 10);
                 const eventId = Object.keys(savedEvents).find(id => 
-                    savedEvents[id].cells.some(c => 
-                        c.tableId === wrap.dataset.tableId && c.hour == td.dataset.hour && c.day === DAYS[td.dataset.col]
-                    )
+                    savedEvents[id].cells.some(c => c.date === cellDate && c.hour === cellHour)
                 );
                 if (eventId) {
                     if (curEventId === eventId) { cells.push(td); } 
                     else {
-                        if (cells.length) groups.push({ eventId: curEventId, cells: [...cells] });
+                        if (cells.length) pushOverlay(curEventId, cells, wrap);
                         curEventId = eventId; cells = [td];
                     }
                 } else {
-                    if (cells.length) groups.push({ eventId: curEventId, cells: [...cells] });
+                    if (cells.length) pushOverlay(curEventId, cells, wrap);
                     curEventId = null; cells = [];
                 }
             }
-            if (cells.length) groups.push({ eventId: curEventId, cells: [...cells] });
+            if (cells.length) pushOverlay(curEventId, cells, wrap);
         }
-        const wrapRect = wrap.getBoundingClientRect();
-        groups.forEach(g => {
-            const eventData = savedEvents[g.eventId];
-            if (!eventData) return;
-            const first = g.cells[0];
-            const last = g.cells[g.cells.length - 1];
-            const r1 = first.getBoundingClientRect();
-            const r2 = last.getBoundingClientRect();
-            newOverlays.push({
-                key: `${wrap.dataset.tableId}-${g.eventId}-${g.cells[0].dataset.col}`,
-                left: r1.left - wrapRect.left, top: r1.top - wrapRect.top,
-                width: r1.width, height: r2.bottom - r1.top,
-                text: eventData.text, color: eventData.color,
-                isToDelete: g.eventId === deletionId, parentId: wrap.dataset.tableId,
-            });
-        });
     });
     setOverlays(newOverlays);
   }, [savedEvents]);
@@ -248,19 +302,32 @@ export default function TimeTableContainer() {
       <div id="container" ref={containerRef}>
         <TimeTable 
             tableId="A"
+            weekData={getWeekDates()[0]}
             savedEvents={savedEvents}
-            onCellMouseDown={handleCellMouseDown}
-            onCellMouseEnter={handleCellMouseEnter}
+            handlers={{ 
+                onMouseDown: handleCellMouseDown, 
+                onMouseEnter: handleCellMouseEnter,
+                // ✅ 传递新增的 Touch 事件
+                onTouchStart: handleTouchStart,
+                onTouchMove: handleTouchMove
+            }}
             overlays={overlays.filter(o => o.parentId === 'A')}
         />
         <TimeTable 
             tableId="B"
+            weekData={getWeekDates()[1]}
             savedEvents={savedEvents}
-            onCellMouseDown={handleCellMouseDown}
-            onCellMouseEnter={handleCellMouseEnter}
+            handlers={{ 
+                onMouseDown: handleCellMouseDown, 
+                onMouseEnter: handleCellMouseEnter,
+                // ✅ 传递新增的 Touch 事件
+                onTouchStart: handleTouchStart,
+                onTouchMove: handleTouchMove
+            }}
             overlays={overlays.filter(o => o.parentId === 'B')}
         />
       </div>
+      
       {confirmBtn.visible && <button id="confirmBtn" style={{ left: confirmBtn.x, top: confirmBtn.y }} onClick={() => setFormVisible(true)} />}
       {deleteBtn.visible && <button id="deleteBtn" style={{ left: deleteBtn.x, top: deleteBtn.y }} onClick={handleDeleteEvent} />}
       {isFormVisible && (
@@ -273,23 +340,18 @@ export default function TimeTableContainer() {
   );
 }
 
-// --- 子组件 ---
-
-function TimeTable({ tableId, savedEvents, onCellMouseDown, onCellMouseEnter, overlays }) {
-  const [thisWeek, nextWeek] = getWeekDates();
-  const weekDates = tableId === 'A' ? thisWeek : nextWeek;
-
+const TimeTable = React.memo(({ tableId, weekData, savedEvents, handlers, overlays }) => {
   return (
     <div className="table-wrap" data-table-id={tableId}>
       <table>
         <thead>
           <tr>
             <th>{tableId === 'A' ? 'See' : 'You'}</th>
-            {['一', '二', '三', '四', '五', '六', '日'].map((day, i) => (
-              <th key={day}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <span>{day}</span>
-                  <span style={{ fontSize: '11px', color: '#777', marginTop: '2px' }}>{weekDates[i]}</span>
+            {DAYS_LABEL.map((dayLabel, i) => (
+              <th key={i}>
+                <div className="th-content">
+                  <span className="th-day">{dayLabel}</span>
+                  <span className="th-date">{weekData[i].split('-')[2]}</span>
                 </div>
               </th>
             ))}
@@ -299,19 +361,24 @@ function TimeTable({ tableId, savedEvents, onCellMouseDown, onCellMouseEnter, ov
           {HOURS.map(hour => (
             <tr key={hour}>
               <th>{String(hour).padStart(2, '0')}:00</th>
-              {DAYS.map((day, colIdx) => {
+              {DAYS_KEY.map((_, colIdx) => {
+                  const currentDate = weekData[colIdx];
                   const eventId = savedEvents && Object.keys(savedEvents).find(id => 
-                    savedEvents[id]?.cells.some(c => c.tableId === tableId && c.hour === hour && c.day === day)
+                    savedEvents[id]?.cells.some(c => c.date === currentDate && c.hour === hour)
                   );
                   return (
                     <td
-                      key={day}
+                      key={colIdx}
                       data-col={colIdx}
                       data-hour={hour}
+                      data-date={currentDate}
                       data-event-id={eventId || ''}
                       className={eventId ? 'marked' : ''}
-                      onMouseDown={onCellMouseDown}
-                      onMouseEnter={onCellMouseEnter}
+                      // ✅ 绑定所有事件
+                      onMouseDown={handlers.onMouseDown}
+                      onMouseEnter={handlers.onMouseEnter}
+                      onTouchStart={handlers.onTouchStart}
+                      onTouchMove={handlers.onTouchMove}
                     />
                   );
               })}
@@ -325,7 +392,7 @@ function TimeTable({ tableId, savedEvents, onCellMouseDown, onCellMouseEnter, ov
           className={`overlay-block ${o.isToDelete ? 'overlay-delete' : ''}`}
           style={{ 
               left: o.left, top: o.top, width: o.width, height: o.height, 
-              backgroundColor: o.isToDelete ? null : o.color 
+              background: o.isToDelete ? null : o.color 
           }}
         >
           {o.text}
@@ -333,22 +400,20 @@ function TimeTable({ tableId, savedEvents, onCellMouseDown, onCellMouseEnter, ov
       ))}
     </div>
   );
-}
+});
 
 function EventForm({ onSave }) {
   const [text, setText] = useState('');
-  const [selectedColor, setSelectedColor] = useState(PRESET_COLORS[0]);
+  const [selectedColor, setSelectedColor] = useState(PRESET_GRADIENTS[0]);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   const handleSave = () => { onSave(text.trim(), selectedColor); };
   const handleKeyDown = (e) => { if (e.key === 'Enter') { handleSave(); } };
   return (
-    <div id="formBox" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
-      {/* ✅ 关键改动：添加 autoComplete="off" */}
+    <div id="formBox">
       <input 
         ref={inputRef} 
-        id="eventText" 
-        placeholder="输入事件内容..." 
+        placeholder="输入事项..." 
         value={text} 
         onChange={(e) => setText(e.target.value)} 
         onKeyDown={handleKeyDown}
@@ -356,12 +421,12 @@ function EventForm({ onSave }) {
       />
       <div className="form-footer">
         <div id="colorPalette">
-          {PRESET_COLORS.map(color => (
+          {PRESET_GRADIENTS.map((gradient, idx) => (
             <div 
-              key={color} 
-              className={`color-option ${selectedColor === color ? 'selected' : ''}`} 
-              style={{ backgroundColor: color }} 
-              onClick={() => setSelectedColor(color)} 
+              key={idx} 
+              className={`color-option ${selectedColor === gradient ? 'selected' : ''}`} 
+              style={{ background: gradient }} 
+              onClick={() => setSelectedColor(gradient)} 
             />
           ))}
         </div>
