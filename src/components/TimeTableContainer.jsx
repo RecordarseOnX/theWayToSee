@@ -47,6 +47,8 @@ function getWeekDates() {
 export default function TimeTableContainer() {
   const [savedEvents, setSavedEvents] = useState({});
   const [eventToDeleteId, setEventToDeleteId] = useState(null);
+  const [eventToEdit, setEventToEdit] = useState(null); 
+
   const [overlays, setOverlays] = useState([]);
   const [confirmBtn, setConfirmBtn] = useState({ visible: false, x: 0, y: 0 });
   const [deleteBtn, setDeleteBtn] = useState({ visible: false, x: 0, y: 0 });
@@ -58,6 +60,9 @@ export default function TimeTableContainer() {
   const lastActiveCellRef = useRef(null);
   const hadDragSelectionRef = useRef(false);
   const suppressNextClickRef = useRef(false);
+
+  // 移动端双击检测 Ref
+  const lastTouchRef = useRef({ time: 0, id: null });
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -76,6 +81,7 @@ export default function TimeTableContainer() {
   useEffect(() => {
     const handleMouseUp = () => {
       if (hadDragSelectionRef.current) {
+        // 如果发生过拖拽，抑制紧接的 Click 事件
         suppressNextClickRef.current = true;
         setTimeout(() => (suppressNextClickRef.current = false), 0);
       }
@@ -85,12 +91,12 @@ export default function TimeTableContainer() {
     };
 
     const handleDocumentClick = (e) => {
+      // ✅ 关键：如果处于抑制期（刚双击完或刚拖拽完），不执行任何关闭逻辑
       if (suppressNextClickRef.current) return;
       if (e.target.closest('td, #confirmBtn, #formBox, #deleteBtn')) return;
       clearActiveAndDeleteMode();
     };
 
-    // 支持 TouchEnd 全局清理
     document.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('touchend', handleMouseUp);
     document.addEventListener('click', handleDocumentClick);
@@ -113,6 +119,7 @@ export default function TimeTableContainer() {
   const clearActiveAndDeleteMode = useCallback(() => {
     document.querySelectorAll('td.active').forEach(td => td.classList.remove('active'));
     setEventToDeleteId(null);
+    setEventToEdit(null);
     setConfirmBtn({ visible: false, x: 0, y: 0 });
     setDeleteBtn({ visible: false, x: 0, y: 0 });
     setFormVisible(false);
@@ -121,10 +128,13 @@ export default function TimeTableContainer() {
   const updateConfirmButton = useCallback(() => {
     const selected = document.querySelectorAll('td.active');
     const lastCell = lastActiveCellRef.current;
+    
+    // ✅ 修复：只要有选中的格子（哪怕是1个），就显示确认按钮
     if (!selected.length || !lastCell) {
       setConfirmBtn({ visible: false, x: 0, y: 0 });
       return;
     }
+    
     const rect = lastCell.getBoundingClientRect();
     setConfirmBtn({
       visible: true,
@@ -136,7 +146,6 @@ export default function TimeTableContainer() {
   // --- PC端 鼠标事件 ---
   const handleCellMouseDown = useCallback((e) => {
     const td = e.currentTarget;
-    // 只有左键点击才触发选中 (避免右键菜单干扰)
     if (e.button !== 0) return;
 
     const eventId = td.dataset.eventId;
@@ -155,6 +164,20 @@ export default function TimeTableContainer() {
     updateConfirmButton();
   }, [updateConfirmButton]);
 
+  const handleCellDoubleClick = useCallback((e) => {
+    const td = e.currentTarget;
+    const eventId = td.dataset.eventId;
+    
+    if (eventId && savedEvents[eventId]) {
+      e.stopPropagation(); 
+      e.preventDefault();
+      setDeleteBtn({ visible: false, x: 0, y: 0 });
+      setEventToDeleteId(null);
+      setEventToEdit({ id: eventId, ...savedEvents[eventId] });
+      setFormVisible(true);
+    }
+  }, [savedEvents]);
+
   const handleCellMouseEnter = useCallback((e) => {
     if (isMouseDownRef.current) {
       hadDragSelectionRef.current = true;
@@ -164,14 +187,43 @@ export default function TimeTableContainer() {
     }
   }, [updateConfirmButton]);
 
-  // --- 移动端 触摸事件 (新增逻辑) ---
+  // --- 移动端 触摸事件 (修复版) ---
   const handleTouchStart = useCallback((e) => {
-    // 阻止默认事件可能导致无法点击，这里主要依靠 CSS 的 touch-action: none
     const td = e.currentTarget;
     const eventId = td.dataset.eventId;
     
+    // 1. 点击已存在的事件 (判断是否双击)
     if (eventId) {
-        // 如果点击的是已有事件，走删除逻辑
+        const now = Date.now();
+        const lastTouch = lastTouchRef.current;
+
+        // --- 双击检测 (间隔 < 300ms) ---
+        if (lastTouch.id === eventId && (now - lastTouch.time < 300)) {
+            // 🚫 阻止默认行为 (防止 300ms 后的幽灵点击关闭弹窗)
+            if (e.cancelable) e.preventDefault(); 
+            e.stopPropagation();
+
+            // 🚫 设置全局抑制锁 (防止遮罩层误触)
+            suppressNextClickRef.current = true;
+            setTimeout(() => { suppressNextClickRef.current = false; }, 500); // 锁住 500ms
+
+            // 清理状态
+            lastTouchRef.current = { time: 0, id: null };
+            setDeleteBtn({ visible: false, x: 0, y: 0 });
+            setEventToDeleteId(null);
+
+            // 打开编辑
+            if (savedEvents[eventId]) {
+                setEventToEdit({ id: eventId, ...savedEvents[eventId] });
+                setFormVisible(true);
+            }
+            return;
+        }
+
+        // 记录单击
+        lastTouchRef.current = { time: now, id: eventId };
+
+        // 显示删除按钮
         setEventToDeleteId(eventId);
         setConfirmBtn({ visible: false, x: 0, y: 0 });
         const rect = td.getBoundingClientRect();
@@ -179,26 +231,33 @@ export default function TimeTableContainer() {
         return;
     }
 
-    // 开始选中逻辑
-    isMouseDownRef.current = true; // 复用 MouseDown 状态
+    // 2. 点击空白格子 (新增选中)
+    // 允许浏览器默认行为 (不阻止)，否则可能影响焦点
+    // e.preventDefault(); <--- 不需要，否则 input 可能无法聚焦
+
+    isMouseDownRef.current = true;
+    
+    // 切换选中状态
     toggleModeRef.current = !td.classList.contains('active');
     td.classList.toggle('active', toggleModeRef.current);
+    
+    // 记录最后操作的格子，并【立即】显示确认按钮
+    // 这解决了 "必须选2个才能显示" 的问题
     lastActiveCellRef.current = td;
     hadDragSelectionRef.current = false;
     updateConfirmButton();
-  }, [updateConfirmButton]);
+
+  }, [updateConfirmButton, savedEvents]); 
 
   const handleTouchMove = useCallback((e) => {
-    // 阻止浏览器默认滚动行为 (前提是 CSS 加了 touch-action: none)
-    // 注意：如果想保留页面滚动，这里逻辑会变复杂，通常表格拖拽选区是互斥的
+    // 阻止滚动，保证拖拽流畅 (前提是 CSS td { touch-action: none })
     if (e.cancelable) e.preventDefault();
 
     if (isMouseDownRef.current) {
         const touch = e.touches[0];
-        // 核心：根据坐标找到当前手指下的元素
         const target = document.elementFromPoint(touch.clientX, touch.clientY);
         
-        // 确保目标是 td，且是我们表格里的 td
+        // 拖拽多选逻辑
         if (target && target.tagName === 'TD' && target !== lastActiveCellRef.current && containerRef.current.contains(target)) {
             hadDragSelectionRef.current = true;
             target.classList.toggle('active', toggleModeRef.current);
@@ -211,6 +270,25 @@ export default function TimeTableContainer() {
   // --- 数据操作 ---
   const handleSaveEvent = useCallback(async (text, color) => {
     if (!text) return;
+
+    if (eventToEdit) {
+      const { error } = await supabase
+        .from('timetable_events')
+        .update({ event_text: text, color: color })
+        .eq('id', eventToEdit.id);
+
+      if (!error) {
+        setSavedEvents(prev => ({
+          ...prev,
+          [eventToEdit.id]: { ...prev[eventToEdit.id], text: text, color: color }
+        }));
+        clearActiveAndDeleteMode();
+      } else {
+        alert('更新失败');
+      }
+      return;
+    }
+
     const selected = Array.from(document.querySelectorAll('td.active'));
     if (!selected.length) return;
     const newCells = selected.map(td => ({
@@ -229,7 +307,7 @@ export default function TimeTableContainer() {
     } else {
       alert('保存失败');
     }
-  }, [clearActiveAndDeleteMode]);
+  }, [clearActiveAndDeleteMode, eventToEdit]);
 
   const handleDeleteEvent = useCallback(async () => {
     if (!eventToDeleteId) return;
@@ -307,9 +385,9 @@ export default function TimeTableContainer() {
             handlers={{ 
                 onMouseDown: handleCellMouseDown, 
                 onMouseEnter: handleCellMouseEnter,
-                // ✅ 传递新增的 Touch 事件
                 onTouchStart: handleTouchStart,
-                onTouchMove: handleTouchMove
+                onTouchMove: handleTouchMove,
+                onDoubleClick: handleCellDoubleClick
             }}
             overlays={overlays.filter(o => o.parentId === 'A')}
         />
@@ -320,9 +398,9 @@ export default function TimeTableContainer() {
             handlers={{ 
                 onMouseDown: handleCellMouseDown, 
                 onMouseEnter: handleCellMouseEnter,
-                // ✅ 传递新增的 Touch 事件
                 onTouchStart: handleTouchStart,
-                onTouchMove: handleTouchMove
+                onTouchMove: handleTouchMove,
+                onDoubleClick: handleCellDoubleClick
             }}
             overlays={overlays.filter(o => o.parentId === 'B')}
         />
@@ -330,10 +408,15 @@ export default function TimeTableContainer() {
       
       {confirmBtn.visible && <button id="confirmBtn" style={{ left: confirmBtn.x, top: confirmBtn.y }} onClick={() => setFormVisible(true)} />}
       {deleteBtn.visible && <button id="deleteBtn" style={{ left: deleteBtn.x, top: deleteBtn.y }} onClick={handleDeleteEvent} />}
+      
       {isFormVisible && (
         <>
-          <div id="modalOverlay" onClick={clearActiveAndDeleteMode}></div>
-          <EventForm onSave={handleSaveEvent} />
+          {/* ✅ 修复遮罩层点击：检查抑制锁 */}
+          <div id="modalOverlay" onClick={(e) => {
+             if (suppressNextClickRef.current) return;
+             clearActiveAndDeleteMode();
+          }}></div>
+          <EventForm onSave={handleSaveEvent} initialData={eventToEdit} />
         </>
       )}
     </>
@@ -374,11 +457,11 @@ const TimeTable = React.memo(({ tableId, weekData, savedEvents, handlers, overla
                       data-date={currentDate}
                       data-event-id={eventId || ''}
                       className={eventId ? 'marked' : ''}
-                      // ✅ 绑定所有事件
                       onMouseDown={handlers.onMouseDown}
                       onMouseEnter={handlers.onMouseEnter}
                       onTouchStart={handlers.onTouchStart}
                       onTouchMove={handlers.onTouchMove}
+                      onDoubleClick={handlers.onDoubleClick}
                     />
                   );
               })}
@@ -402,9 +485,9 @@ const TimeTable = React.memo(({ tableId, weekData, savedEvents, handlers, overla
   );
 });
 
-function EventForm({ onSave }) {
-  const [text, setText] = useState('');
-  const [selectedColor, setSelectedColor] = useState(PRESET_GRADIENTS[0]);
+function EventForm({ onSave, initialData }) {
+  const [text, setText] = useState(initialData ? initialData.text : '');
+  const [selectedColor, setSelectedColor] = useState(initialData ? initialData.color : PRESET_GRADIENTS[0]);
   const inputRef = useRef(null);
   useEffect(() => { inputRef.current?.focus(); }, []);
   const handleSave = () => { onSave(text.trim(), selectedColor); };
