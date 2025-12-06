@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: 20
 
       # 3. 安装 pnpm (因为你是用 pnpm 的)
       - uses: pnpm/action-setup@v2
