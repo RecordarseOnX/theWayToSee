@@ -3,7 +3,7 @@ name: Deploy Live Update
 on:
   push:
     branches:
-      - main  # 监听 main 分支的提交
+      - master  # 监听 main 分支的提交
 
 jobs:
   deploy:

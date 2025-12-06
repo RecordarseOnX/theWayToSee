@@ -1,15 +1,11 @@
-import type { CapacitorConfig } from '@capacitor/cli';
-
-const config: CapacitorConfig = {
-  appId: 'com.timetable.thewaytosee',  // 👈 这里的 ID 就是最终的 ID，你自己定！
-  appName: 'TheWayTosee',
-  webDir: 'dist',
-  plugins: {
-    CapacitorUpdater: {
-      autoUpdate: true,
-      statsUrl: "",
+{
+  "appId": "com.timetable.thewaytosee",
+  "appName": "TheWayTosee",
+  "webDir": "dist",
+  "plugins": {
+    "CapacitorUpdater": {
+      "autoUpdate": true,
+      "statsUrl": ""
     }
   }
-};
-
-export default config;
+}
