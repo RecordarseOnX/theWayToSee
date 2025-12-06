@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">My TimeTable</string>
-    <string name="title_activity_main">My TimeTable</string>
-    <string name="package_name">com.recordarse.tosee</string>
-    <string name="custom_url_scheme">com.recordarse.tosee</string>
-</resources>
