@@ -1,0 +1,40 @@
+name: Deploy Live Update
+
+on:
+  push:
+    branches:
+      - main  # 监听 main 分支的提交
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 拉取代码
+      - uses: actions/checkout@v3
+
+      # 2. 安装 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+
+      # 3. 安装 pnpm (因为你是用 pnpm 的)
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      # 4. 安装项目依赖
+      - name: Install dependencies
+        run: pnpm install
+
+      # 5. 打包 React 代码 (生成 dist 目录)
+      - name: Build Web App
+        run: pnpm build
+
+      # 6. 上传到 Capgo
+      # 这一步会自动读取你 capacitor.config.ts 里的 AppID (com.timetable.thewaytosee)
+      # 并使用你在 GitHub 设置好的 Secret 进行鉴权
+      - name: Upload to Capgo
+        env:
+          CAPGO_TOKEN: ${{ secrets.CAPGO_TOKEN }}
+        run: npx @capgo/cli@latest upload -a ${{ secrets.CAPGO_TOKEN }} -c production

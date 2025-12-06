@@ -1,4 +1,4 @@
-package com.example.myapp;
+package com.recordarse.tosee;
 
 import com.getcapacitor.BridgeActivity;
 

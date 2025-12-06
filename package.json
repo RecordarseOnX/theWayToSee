@@ -12,6 +12,7 @@
   "dependencies": {
     "@capacitor/android": "^7.4.4",
     "@capacitor/core": "^7.4.4",
+    "@capgo/capacitor-updater": "^6.27.11",
     "@supabase/supabase-js": "^2.80.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.548.0",
