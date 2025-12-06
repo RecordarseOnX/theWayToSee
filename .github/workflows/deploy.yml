@@ -3,7 +3,7 @@ name: Deploy Live Update
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
   deploy:
